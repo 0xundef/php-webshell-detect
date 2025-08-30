@@ -307,3 +307,7 @@ It will cause the propagation of `var`'s value to be interrupted, will raise the
 - Emmbed simulated vm
   
   trackable simplified vm, which mock the underlying level functionality like like network communication and file operation, etc.
+
+# Acknowledgments
+
+This project utilizes the PHP parser source code from  [z7zmey/php-parser](https://github.com/z7zmey/php-parser).
