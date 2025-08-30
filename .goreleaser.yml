@@ -1,0 +1,185 @@
+# GoReleaser configuration for webshell-detect
+
+project_name: webshell-detect
+
+before:
+  hooks:
+    # Clean up before building
+    - go mod tidy
+    - go generate ./...
+
+builds:
+  - id: webshell-detect
+    main: ./cmd/webshell-detect
+    binary: webshell-detect
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      # Skip arm64 for Windows as it's not commonly used
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X main.Version={{.Version}}
+      - -X main.BuildTime={{.Date}}
+      - -X main.GitCommit={{.Commit}}
+      - -X main.GoVersion={{.Env.GOVERSION}}
+    flags:
+      - -trimpath
+
+archives:
+  - id: default
+    builds:
+      - webshell-detect
+    name_template: >-
+      {{ .ProjectName }}-
+      {{- title .Os }}-
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}-
+      {{- .Version }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - config/conf.yaml
+      - config/mock.php
+      - README.md
+      - LICENSE*
+
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - '^chore:'
+      - '^style:'
+      - '^refactor:'
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\(.+\))??!?:.+$'
+      order: 0
+    - title: 'Bug fixes'
+      regexp: '^.*?fix(\(.+\))??!?:.+$'
+      order: 1
+    - title: 'Performance improvements'
+      regexp: '^.*?perf(\(.+\))??!?:.+$'
+      order: 2
+    - title: Others
+      order: 999
+
+release:
+  github:
+    owner: "{{ .Env.GITHUB_REPOSITORY_OWNER }}"
+    name: "{{ .Env.GITHUB_REPOSITORY_NAME }}"
+  name_template: "{{.ProjectName}} v{{.Version}}"
+  header: |
+    ## What's Changed
+    
+    This release includes the following changes:
+  footer: |
+    
+    **Full Changelog**: https://github.com/{{ .Env.GITHUB_REPOSITORY_OWNER }}/{{ .Env.GITHUB_REPOSITORY_NAME }}/compare/{{ .PreviousTag }}...{{ .Tag }}
+  draft: false
+  prerelease: auto
+  mode: replace
+
+# Docker images (optional)
+# dockers:
+#   - image_templates:
+#       - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/{{ .ProjectName }}:{{ .Version }}"
+#       - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/{{ .ProjectName }}:latest"
+#     dockerfile: Dockerfile
+#     build_flag_templates:
+#       - "--platform=linux/amd64"
+#       - "--label=org.opencontainers.image.created={{.Date}}"
+#       - "--label=org.opencontainers.image.title={{.ProjectName}}"
+#       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+#       - "--label=org.opencontainers.image.version={{.Version}}"
+
+# Homebrew formula (optional)
+# brews:
+#   - name: webshell-detect
+#     repository:
+#       owner: "{{ .Env.GITHUB_REPOSITORY_OWNER }}"
+#       name: homebrew-tap
+#     folder: Formula
+#     homepage: "https://github.com/{{ .Env.GITHUB_REPOSITORY_OWNER }}/{{ .Env.GITHUB_REPOSITORY_NAME }}"
+#     description: "A tool for detecting PHP webshells using static analysis"
+#     license: "MIT"
+#     test: |
+#       system "#{bin}/webshell-detect --version"
+
+# Scoop manifest for Windows (optional)
+# scoops:
+#   - name: webshell-detect
+#     repository:
+#       owner: "{{ .Env.GITHUB_REPOSITORY_OWNER }}"
+#       name: scoop-bucket
+#     folder: bucket
+#     homepage: "https://github.com/{{ .Env.GITHUB_REPOSITORY_OWNER }}/{{ .Env.GITHUB_REPOSITORY_NAME }}"
+#     description: "A tool for detecting PHP webshells using static analysis"
+#     license: "MIT"
+
+# AUR package for Arch Linux (optional)
+# aurs:
+#   - name: webshell-detect-bin
+#     homepage: "https://github.com/{{ .Env.GITHUB_REPOSITORY_OWNER }}/{{ .Env.GITHUB_REPOSITORY_NAME }}"
+#     description: "A tool for detecting PHP webshells using static analysis"
+#     maintainers:
+#       - 'Your Name <your.email@example.com>'
+#     license: "MIT"
+#     private_key: '{{ .Env.AUR_KEY }}'
+#     git_url: 'ssh://aur@aur.archlinux.org/webshell-detect-bin.git'
+#     package: |
+#       # bin
+#       install -Dm755 "./webshell-detect" "${pkgdir}/usr/bin/webshell-detect"
+#       
+#       # license
+#       install -Dm644 "./LICENSE" "${pkgdir}/usr/share/licenses/webshell-detect/LICENSE"
+#       
+#       # config files
+#       install -Dm644 "./config/conf.yaml" "${pkgdir}/etc/webshell-detect/conf.yaml"
+#       install -Dm644 "./config/mock.php" "${pkgdir}/etc/webshell-detect/mock.php"
+
+# Nix package (optional)
+# nix:
+#   - name: webshell-detect
+#     repository:
+#       owner: "{{ .Env.GITHUB_REPOSITORY_OWNER }}"
+#       name: nur-packages
+#     homepage: "https://github.com/{{ .Env.GITHUB_REPOSITORY_OWNER }}/{{ .Env.GITHUB_REPOSITORY_NAME }}"
+#     description: "A tool for detecting PHP webshells using static analysis"
+#     license: "mit"
+
+# Announce releases (optional)
+# announce:
+#   slack:
+#     enabled: true
+#     message_template: 'webshell-detect {{ .Tag }} is out! Check it out at {{ .ReleaseURL }}'
+#     channel: '#releases'
+#     username: 'GoReleaser'
+#   discord:
+#     enabled: true
+#     message_template: 'webshell-detect {{ .Tag }} is out! Check it out at {{ .ReleaseURL }}'
+#     author: 'GoReleaser'
+#     color: '3888754'
+#     icon_url: 'https://goreleaser.com/static/avatar.png'
