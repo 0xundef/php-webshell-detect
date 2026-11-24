@@ -8,12 +8,16 @@
    * [Assignment Classification](#assignment-classification)
    * [Detection Process](#detection-process)
    * [Core Solve Algorithm](#core-solve-algorithm)
+- [Build and Usage](#build-and-usage)
+- [Configuration](#configuration)
+- [Known Limitations](#known-limitations)
 - [Strategy](#strategy)
    * [Taint Analyze](#taint-analyze)
    * [Flow Definition](#flow-definition)
    * [What Happens with Unmocked Functions](#what-happens-with-unmocked-functions)
    * [Pitfalls to Work around](#pitfalls-to-work-around)
 - [TODO](#todo)
+- [License](#license)
 
 
 # Intro
@@ -85,15 +89,17 @@ time="2024-02-16T14:49:50+07:00" level=debug msg="[%temp2_6=shell_exec(%temp2_17
 # Implemented components
 - context
 
-  Context sensitivity is crucial, currently implemented as k-callsite-n, with n defaulting to 2.
+  Context sensitivity is currently implemented as k-callsite-n (n defaults to 2) and context-insensitive (ci). Object sensitivity is not implemented.
 
 - heap
 
   Simple modeling of objects on the PHP heap, including constants, class objects, and merged objects.
 
 - frontend
-  
-  Utilized by opensource project [php-parser](https://github.com/z7zmey/php-parser)
+
+  Vendored fork of [php-parser](https://github.com/z7zmey/php-parser) (MIT); see
+  `frontend/php/README.md`. The analyser configures the PHP 7.4 grammar; the
+  vendored code is excluded from vet/lint.
 
 - ir
 
@@ -132,7 +138,7 @@ The context modeling is based on the assumption that any statement is always exe
 - class object field propagation
 - class hierarchical method lookup
 
-  not yet implemented, basic data structures are available, requiring `ast_visitor` to parse
+  implemented in `PHPClassHierarchy.LookupMethod` (walks the `Super` chain); method and class names are matched case-insensitively, as in PHP
 
 ## Assignment Classification
 - var copy 
@@ -201,6 +207,74 @@ Model variable propagation as:
 - The value of a variable `var` propagates on the pointer graph and call graph.
 - If a `var1` has a new `diff` value, affected `var2` must be found on the pointer graph and the value added to `var2`'s value set.
 - If this `var` has a corresponding invoke call, the context must be extended to this value.
+
+# Build and Usage
+
+Requirements: Go 1.22 or newer. `make vet` intentionally validates only the
+handwritten packages; `go vet ./...` also visits the vendored ragel-generated
+scanner and reports unreachable-code warnings there.
+
+```bash
+make build                 # current platform -> output/webshell-detect
+make test                  # go test ./...
+make vet fmt-check         # static checks (handwritten packages only)
+make build-all             # linux/macos/windows amd64
+BUILD_VERSION=1.2.3 ./build.sh   # release archives including config/
+```
+
+The analyser needs `conf.yaml` and `mock.php`. The config directory is resolved in
+this order: `-config DIR`, `WEBSHELL_DETECT_CONFIG`, `./config`,
+`<executable-dir>/config`.
+
+```bash
+./output/webshell-detect suspicious.php
+./output/webshell-detect -json -config ./config suspicious.php
+```
+
+Options: `-json` (machine-readable report), `-quiet`, `-debug`, `-config DIR`,
+`-version`, `-help`. Options must precede the file argument. Packaging targets
+(`make package-*`, `./build.sh`) additionally require Python 3.
+
+Exit codes:
+
+| code | meaning |
+| ---: | --- |
+| 0 | analysis completed, no finding |
+| 1 | analysis completed, at least one finding |
+| 2 | usage or configuration error |
+| 3 | analysis error (unreadable file, parse failure, ...) |
+
+The JSON report is a single object with `path`, `tags`, `confidence`,
+`findings` (`source_sink`, `reg_eval`, `dynamic_fun`, `decode`), `loop_count`,
+`cost_ms`, `version` and `meta`.
+
+# Configuration
+
+`config/conf.yaml`:
+
+```yaml
+context_policy: k-callsite-2   # "ci" or "k-callsite-<n>"
+debug: false                   # verbose solver logging
+loop_limit: 100000             # solver iteration cap; <= 0 uses the default
+```
+
+`config/mock.php` defines sources, sinks and transfer functions. Sinks are
+declared by naming the sensitive parameter `$sink`, `$sink1`, ... Sink
+parameters for a new function are only picked up if the function is declared in
+the mock file.
+
+# Known Limitations
+
+- Taint is tracked with string markers (`taint`, `decode`, `replace`, ...) in the
+  points-to values. A user string that happens to contain these words can
+  produce a false positive, and custom mocks must use the same markers.
+- No sanitizer model: `escapeshellarg()`/`intval()` do not clear taint, and a
+  source that is only assigned on a dead path is still reported (the analysis is
+  flow-insensitive).
+- The vendored parser targets PHP 7.4. PHP 8 constructs (`match`, arrow
+  functions, nullsafe, named arguments) are not modelled and can lose taint.
+- `Confidence` is coarse: `high` for a direct source-to-sink or regex-eval hit,
+  `medium` for obfuscation-only evidence, `none` when nothing was found.
 
 # Strategy
 Our detection strategy mainly involves two parts: enriching the mock with additional exploit points, including missed sinks and transfer functions, and comprehensive analysis determination.
@@ -308,6 +382,12 @@ It will cause the propagation of `var`'s value to be interrupted, will raise the
   
   trackable simplified vm, which mock the underlying level functionality like like network communication and file operation, etc.
 
+# License
+
+MIT, see [LICENSE](LICENSE).
+
 # Acknowledgments
 
-This project utilizes the PHP parser source code from  [z7zmey/php-parser](https://github.com/z7zmey/php-parser).
+This project utilizes the PHP parser source code from
+[z7zmey/php-parser](https://github.com/z7zmey/php-parser) (MIT, see
+`frontend/php/LICENSE`).
