@@ -1,10 +1,20 @@
+# Build outputs
+/output/
+/dist/
+*.tar.gz
+*.zip
+coverage.out
+coverage.html
+
+# Local tooling
 .vscode
 .idea
 php-parser
-**/*.test
-
+*.test
 *example.php
-
 cpu.pprof
 mem.pprof
 trace.out
+
+# OS
+.DS_Store
