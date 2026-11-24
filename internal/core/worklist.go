@@ -12,7 +12,7 @@ import (
 type WorkList struct {
 	PointerEntries map[string]*context.PointsToSet //map[Pointer]PointsToSet
 	PointerMap     map[string]context.Pointer
-	CallEdges      queue.Queue
+	CallEdges      *queue.Queue
 }
 
 func Map(elements []*context.CSObj) []string {

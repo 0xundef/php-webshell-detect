@@ -31,7 +31,7 @@ func CreateSolver(model heap.HeapModel, selector context.ContextSelector, manage
 	workList := WorkList{
 		PointerEntries: map[string]*context.PointsToSet{},
 		PointerMap:     map[string]context.Pointer{},
-		CallEdges:      queue.Queue{},
+		CallEdges:      queue.New(0),
 	}
 	return &Solver{
 		Selector: selector,
