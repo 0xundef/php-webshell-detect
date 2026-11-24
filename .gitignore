@@ -18,3 +18,7 @@ trace.out
 
 # OS
 .DS_Store
+
+# Python bytecode (packaging helper)
+__pycache__/
+*.pyc
