@@ -1,22 +1,13 @@
-#!/bin/bash
-set -e
-if [ -z "${BUILD_VERSION}" ];then
-  echo 'Please set BUILD_VERSION.'
-  exit 1
-fi
+#!/usr/bin/env bash
+# Build and package the Linux/macOS release archives.
+# Usage: BUILD_VERSION=1.2.3 ./build.sh
+set -euo pipefail
 
-rm -rf output
-mkdir output
+: "${BUILD_VERSION:?Please set BUILD_VERSION, e.g. BUILD_VERSION=1.2.3 ./build.sh}"
 
-#cli for local test
-GOARCH=amd64 go build -ldflags="-s -w" -o cli ./cli/cli.go
+cd "$(dirname "$0")"
+make clean
+make package-linux package-macos VERSION="$BUILD_VERSION"
 
-# Build for Linux
-GOARCH=amd64 GOOS=linux go build -ldflags="-s -w" -o webshell-detect
-tar -zcvf ./output/webshell-detect-linux-default-x86_64-${BUILD_VERSION}.tar.gz webshell-detect ./config
-rm -rf webshell-detect
-
-# Build for macOS
-GOARCH=amd64 GOOS=darwin go build -ldflags="-s -w" -o webshell-detect-macos
-tar -zcvf ./output/webshell-detect-macos-default-x86_64-${BUILD_VERSION}.tar.gz webshell-detect-macos ./config
-rm -rf webshell-detect-macos
+echo "Artifacts:"
+ls -lh output/*.tar.gz

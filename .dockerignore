@@ -1,0 +1,9 @@
+.git
+.github
+output
+dist
+coverage.out
+coverage.html
+*.tar.gz
+*.zip
+test

@@ -1,76 +1,47 @@
-# Build stage
-FROM golang:1.21-alpine AS builder
+# syntax=docker/dockerfile:1
 
-# Install git for version information
-RUN apk add --no-cache git
+FROM golang:1.23-alpine AS builder
 
-# Set working directory
-WORKDIR /app
+RUN apk add --no-cache git ca-certificates
 
-# Copy go mod files
+WORKDIR /src
+
 COPY go.mod go.sum ./
-
-# Download dependencies
 RUN go mod download
 
-# Copy source code
 COPY . .
 
-# Build arguments for version injection
 ARG VERSION=dev
-ARG BUILD_TIME
-ARG GIT_COMMIT
-ARG GO_VERSION
+ARG BUILD_TIME=unknown
+ARG GIT_COMMIT=unknown
 
-# Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build \
-    -ldflags="-X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME} -X main.GitCommit=${GIT_COMMIT} -X main.GoVersion=${GO_VERSION} -w -s" \
-    -a -installsuffix cgo \
-    -o webshell-detect \
-    ./cmd/webshell-detect
+    -trimpath \
+    -ldflags "-X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME} -X main.GitCommit=${GIT_COMMIT} -w -s" \
+    -o /out/webshell-detect ./cmd/webshell-detect
 
-# Final stage
-FROM alpine:latest
+FROM alpine:3.20
 
-# Install ca-certificates for HTTPS requests
-RUN apk --no-cache add ca-certificates
+RUN apk add --no-cache ca-certificates \
+    && addgroup -g 1001 -S webshell \
+    && adduser -u 1001 -S webshell -G webshell
 
-# Create non-root user
-RUN addgroup -g 1001 -S webshell && \
-    adduser -u 1001 -S webshell -G webshell
-
-# Set working directory
 WORKDIR /app
 
-# Copy binary from builder stage
-COPY --from=builder /app/webshell-detect .
+COPY --from=builder /out/webshell-detect /app/webshell-detect
+COPY config /app/config
+COPY LICENSE /app/LICENSE
 
-# Copy configuration files
-COPY --from=builder /app/config ./config
-
-# Change ownership to non-root user
 RUN chown -R webshell:webshell /app
-
-# Switch to non-root user
 USER webshell
 
-# Expose port (if needed for future web interface)
-# EXPOSE 8080
-
-# Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD ./webshell-detect --version || exit 1
+    CMD ["./webshell-detect", "-version"]
 
-# Set entrypoint
-ENTRYPOINT ["./webshell-detect"]
+ENTRYPOINT ["/app/webshell-detect"]
+CMD ["-help"]
 
-# Default command
-CMD ["--help"]
-
-# Labels
 LABEL org.opencontainers.image.title="webshell-detect" \
-      org.opencontainers.image.description="A tool for detecting PHP webshells using static analysis" \
-      org.opencontainers.image.vendor="Security Team" \
+      org.opencontainers.image.description="Static PHP webshell detection using taint and pointer analysis" \
       org.opencontainers.image.licenses="MIT" \
-      org.opencontainers.image.source="https://github.com/your-org/webshell_detect" \
-      org.opencontainers.image.documentation="https://github.com/your-org/webshell_detect/blob/main/README.md"
+      org.opencontainers.image.source="https://github.com/0xundef/php-webshell-detect"
