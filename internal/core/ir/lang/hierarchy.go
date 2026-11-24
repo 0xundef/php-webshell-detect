@@ -1,5 +1,7 @@
 package lang
 
+import "strings"
+
 type ClassHierarchy interface {
 	ResolveMethod(mref MethodRef) *PHPMethod
 	AllClasses() []PHPClass
@@ -24,7 +26,7 @@ func (h *PHPClassHierarchy) LookupMethod(class *PHPClass, name string) *PHPMetho
 			if m != nil {
 				return m
 			}
-			tmp = tmp.Supper
+			tmp = tmp.Super
 		} else {
 			break
 		}
@@ -37,11 +39,11 @@ func (h *PHPClassHierarchy) LookupField(class *PHPClass, name string) *PHPClassF
 	tmp = class
 	for true {
 		if tmp != nil {
-			m := tmp.GetDeclaredFiled(name)
+			m := tmp.GetDeclaredField(name)
 			if m != nil {
 				return m
 			}
-			tmp = tmp.Supper
+			tmp = tmp.Super
 		} else {
 			break
 		}
@@ -54,7 +56,7 @@ func (h *PHPClassHierarchy) AddClass(class *PHPClass) {
 }
 func (h *PHPClassHierarchy) GetClass(name string) *PHPClass {
 	for _, class := range h.Classes {
-		if name == class.Name {
+		if strings.EqualFold(name, class.Name) {
 			return class
 		}
 	}
