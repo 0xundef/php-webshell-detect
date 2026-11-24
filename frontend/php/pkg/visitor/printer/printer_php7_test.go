@@ -13,7 +13,7 @@ import (
 	"github.com/0xundef/php-webshell-detect/frontend/php/version/scanner"
 )
 
-func ExamplePrinter() {
+func Example() {
 	src := `<?php
 
 namespace Foo;
