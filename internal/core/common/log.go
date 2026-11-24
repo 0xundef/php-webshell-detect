@@ -30,35 +30,35 @@ type DefaultLogger struct {
 }
 
 func (l *DefaultLogger) Info(args ...interface{}) {
-	logrus.Info(args)
+	logrus.Info(args...)
 }
 
 func (l *DefaultLogger) Infof(fmt string, args ...interface{}) {
-	logrus.Infof(fmt, args)
+	logrus.Infof(fmt, args...)
 }
 
 func (l *DefaultLogger) Debug(args ...interface{}) {
-	logrus.Debug(args)
+	logrus.Debug(args...)
 }
 
 func (l *DefaultLogger) Debugf(fmt string, args ...interface{}) {
-	logrus.Debugf(fmt, args)
+	logrus.Debugf(fmt, args...)
 }
 
 func (l *DefaultLogger) Warn(args ...interface{}) {
-	logrus.Warn(args)
+	logrus.Warn(args...)
 }
 
 func (l *DefaultLogger) Warnf(fmt string, args ...interface{}) {
-	logrus.Warnf(fmt, args)
+	logrus.Warnf(fmt, args...)
 }
 
 func (l *DefaultLogger) Error(args ...interface{}) {
-	logrus.Error(args)
+	logrus.Error(args...)
 }
 
 func (l *DefaultLogger) Errorf(fmt string, args ...interface{}) {
-	logrus.Errorf(fmt, args)
+	logrus.Errorf(fmt, args...)
 }
 
 func InitDefaultLogger() {
