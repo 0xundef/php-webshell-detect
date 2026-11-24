@@ -1,6 +1,17 @@
 package core
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
+
+	"github.com/0xundef/php-webshell-detect/frontend/php/pkg/conf"
+	"github.com/0xundef/php-webshell-detect/frontend/php/pkg/version"
+	"github.com/0xundef/php-webshell-detect/frontend/php/version/php7"
+	"github.com/0xundef/php-webshell-detect/frontend/php/version/scanner"
 	"github.com/0xundef/php-webshell-detect/internal/core/common"
 	"github.com/0xundef/php-webshell-detect/internal/core/context"
 	"github.com/0xundef/php-webshell-detect/internal/core/heap"
@@ -8,17 +19,8 @@ import (
 	"github.com/0xundef/php-webshell-detect/internal/core/ir/expr"
 	"github.com/0xundef/php-webshell-detect/internal/core/ir/lang"
 	"github.com/0xundef/php-webshell-detect/internal/core/ir/stmt"
-	"github.com/0xundef/php-webshell-detect/frontend/php/pkg/conf"
-	"github.com/0xundef/php-webshell-detect/frontend/php/pkg/version"
-	"github.com/0xundef/php-webshell-detect/frontend/php/version/php7"
-	"github.com/0xundef/php-webshell-detect/frontend/php/version/scanner"
 	"github.com/sirupsen/logrus"
-	"os"
-	"strconv"
-	"strings"
 )
-
-var WORLD *World
 
 type World struct {
 	TypeSystem lang.TypeSystem
@@ -73,6 +75,9 @@ func (w *World) GetIR(method *lang.PHPMethod) ir.IR {
 	return ir
 }
 
+// Analyze runs the solver and collects findings. It may panic on internal
+// invariant violations; callers that handle untrusted input should use
+// AnalyzeSafe instead.
 func (w *World) Analyze() AnalyzeItem {
 	w.S.Solve()
 	ret := w.Collect()
@@ -121,11 +126,11 @@ func (w *World) PrintVarDetail() {
 }
 func (w *World) Collect() AnalyzeItem {
 	result := AnalyzeItem{
+		Path:       w.TargetFile,
 		SourceSink: []string{},
 		RegEval:    []string{},
 		DynamicFun: []string{},
 		Decode:     []string{},
-		Confidence: "high",
 	}
 	for _, edge := range w.S.CallEdges {
 		for _, name := range edge.Callee.Method.ParamNames {
@@ -201,11 +206,50 @@ func (w *World) Collect() AnalyzeItem {
 			}
 		}
 	}
+	result.Confidence = confidenceFor(result.HitTags)
 	return result
 }
 
-func initialize(config DetectConf) *World {
-	ir.PHP_CONTEXT = ir.InitPHPContext()
+// confidenceFor maps the coarse hit tags to a confidence level. A direct
+// source-to-sink or a regex-eval hit is high confidence; obfuscation-only
+// evidence is medium; no hit at all is "none".
+func confidenceFor(tags HIT_TAG) string {
+	switch {
+	case tags&(SourceSink|RegEval) != 0:
+		return ConfidenceHigh
+	case tags&(SuspiciousDecode|DynamicFun) != 0:
+		return ConfidenceMedium
+	default:
+		return ConfidenceNone
+	}
+}
+
+// phpContextOnce guards the process-wide PHP builtin list. It is immutable
+// after the first initialization, so concurrent analyses can share it safely.
+var phpContextOnce sync.Once
+
+// DefaultLoopLimit bounds solver iterations when the config omits a limit.
+const DefaultLoopLimit = 100000
+
+func initialize(config DetectConf) (*World, error) {
+	if config.Path == "" {
+		return nil, fmt.Errorf("no target file supplied")
+	}
+	if config.LoopLimit <= 0 {
+		config.LoopLimit = DefaultLoopLimit
+	}
+	if config.ConfigDir == "" {
+		config.ConfigDir = "config"
+	}
+
+	selector, err := context.NewSelector(config.ContextPolicy)
+	if err != nil {
+		return nil, err
+	}
+
+	phpContextOnce.Do(func() {
+		ir.PHP_CONTEXT = ir.InitPHPContext()
+	})
 	if common.Log() == nil {
 		common.InitDefaultLogger()
 	}
@@ -213,18 +257,8 @@ func initialize(config DetectConf) *World {
 	typeSystem := &lang.PHPTypeSystem{
 		Hierarchy: hierarchy,
 	}
-	var selector context.ContextSelector
-	heap := heap.CreateHeapModel()
-	if config.ContextPolicy == "ci" {
-		selector = context.CreateCISelector()
-	} else if strings.Contains(config.ContextPolicy, "k-callsite") {
-		items := strings.Split(config.ContextPolicy, "-")
-		if len(items) == 3 {
-			limit, _ := strconv.Atoi(items[2])
-			selector = context.CreateKCallSiteSelector(limit)
-		}
-	}
-	solver := CreateSolver(heap, selector, context.CreateCSManager())
+	hm := heap.CreateHeapModel()
+	solver := CreateSolver(hm, selector, context.CreateCSManager())
 
 	w := &World{
 		TypeSystem: typeSystem,
@@ -236,43 +270,60 @@ func initialize(config DetectConf) *World {
 		LoopLimit:  config.LoopLimit,
 		TargetFile: config.Path,
 		Debug:      config.Debug,
-		MockPath:   config.ConfigDir + "/mock.php",
+		MockPath:   filepath.Join(config.ConfigDir, "mock.php"),
 		IRS:        map[string]ir.IR{},
 	}
 	if config.Debug {
 		logrus.SetLevel(logrus.DebugLevel)
 	}
 	solver.world = w
-	return w
+	return w, nil
 }
 
-func Bang(config DetectConf) *World {
-	w := initialize(config)
-	w.buildAllClasses()
-	return w
+// New parses the target file together with the mock definitions and returns a
+// world ready for Analyze. User-facing failures are returned as errors; a
+// panic inside the frontend is converted into an error as well.
+func New(config DetectConf) (w *World, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			w = nil
+			err = fmt.Errorf("initialize analysis: %v", r)
+		}
+	}()
+
+	w, err = initialize(config)
+	if err != nil {
+		return nil, err
+	}
+	if err = w.buildAllClasses(); err != nil {
+		return nil, err
+	}
+	return w, nil
 }
 
-func (w *World) buildAllClasses() {
+func (w *World) buildAllClasses() error {
 	config := conf.Config{
 		Version: &version.Version{
 			Major: 7,
 			Minor: 4,
 		},
 	}
-	path := w.TargetFile
-	content, err := os.ReadFile(path)
+	content, err := os.ReadFile(w.TargetFile)
 	if err != nil {
-		panic(path + " dose not exist")
+		return fmt.Errorf("read target file %q: %w", w.TargetFile, err)
 	}
 	mock, err := os.ReadFile(w.MockPath)
 	if err != nil {
-		panic("config/mock.php read failed")
+		return fmt.Errorf("read mock file %q: %w", w.MockPath, err)
 	}
 	content = append(content, mock...)
 	lexer := scanner.NewLexer(content, config)
 	php7parser := php7.NewParser(lexer, config)
 	php7parser.Parse()
 	root := php7parser.GetRootNode()
+	if root == nil {
+		return fmt.Errorf("parse %q: empty syntax tree", w.TargetFile)
+	}
 
 	entryClass := lang.CreatePHPClass("EntryMain", "main")
 	mainMethod := lang.CreatePHPMethod(entryClass, "main", nil, nil, nil)
@@ -291,4 +342,16 @@ func (w *World) buildAllClasses() {
 		Debug:      w.Debug,
 	}
 	root.Accept(converter)
+	return nil
+}
+
+// AnalyzeSafe runs the solver and converts internal panics into errors so that
+// callers do not have to recover themselves.
+func (w *World) AnalyzeSafe() (item AnalyzeItem, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("analysis failed: %v", r)
+		}
+	}()
+	return w.Analyze(), nil
 }
