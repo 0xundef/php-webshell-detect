@@ -1,8 +1,8 @@
 package context
 
 import (
-	"github.com/0xundef/php-webshell-detect/internal/core/ir/stmt"
 	"fmt"
+	"github.com/0xundef/php-webshell-detect/internal/core/ir/stmt"
 	"strings"
 )
 

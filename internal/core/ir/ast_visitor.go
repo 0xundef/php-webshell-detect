@@ -1,11 +1,11 @@
 package ir
 
 import (
+	"github.com/0xundef/php-webshell-detect/frontend/php/pkg/ast"
 	"github.com/0xundef/php-webshell-detect/internal/core/common"
 	"github.com/0xundef/php-webshell-detect/internal/core/ir/expr"
 	"github.com/0xundef/php-webshell-detect/internal/core/ir/lang"
 	"github.com/0xundef/php-webshell-detect/internal/core/ir/stmt"
-	"github.com/0xundef/php-webshell-detect/frontend/php/pkg/ast"
 	"strconv"
 	"strings"
 )
