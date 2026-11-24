@@ -2,27 +2,36 @@ package core
 
 type HIT_TAG int
 
-//SourceSink:normal type
-//RegEval:regex match eval option
-//DynamicFun:call suspicious dynamic function
-//SuspiciousDecode:pass suspicious arguments to sink function
+// Hit tags reported by the detection pass.
 const (
-	All              HIT_TAG = -1
-	SourceSink       HIT_TAG = 1
-	DynamicFun       HIT_TAG = 1 << 1
+	// All matches every tag (used by batch output filters).
+	All HIT_TAG = -1
+	// SourceSink: tainted value reaches a sensitive parameter.
+	SourceSink HIT_TAG = 1
+	// DynamicFun: call through a computed function name.
+	DynamicFun HIT_TAG = 1 << 1
+	// SuspiciousDecode: decode/transform chain reaches a sink.
 	SuspiciousDecode HIT_TAG = 1 << 2
-	RegEval          HIT_TAG = 1 << 3
+	// RegEval: regex with the eval modifier (e.g. /x/e).
+	RegEval HIT_TAG = 1 << 3
+)
+
+// Confidence levels reported alongside the hit tags.
+const (
+	ConfidenceHigh   = "high"
+	ConfidenceMedium = "medium"
+	ConfidenceNone   = "none"
 )
 
 func (h HIT_TAG) String() string {
 	switch h {
-	case 1:
+	case SourceSink:
 		return "SourceSink"
-	case 2:
+	case DynamicFun:
 		return "DynamicFun"
-	case 4:
+	case SuspiciousDecode:
 		return "SuspiciousDecode"
-	case 8:
+	case RegEval:
 		return "RegEval"
 	}
 	return ""
