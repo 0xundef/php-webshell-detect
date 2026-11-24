@@ -1,4 +1,6 @@
+# Context sensitivity: "ci" (context insensitive) or "k-callsite-<n>".
 context_policy: k-callsite-2
+# Enable verbose solver/IR logging (also enabled by -debug).
 debug: false
+# Solver worklist iteration cap; <= 0 falls back to the built-in default.
 loop_limit: 100000
-data_type: 60000
